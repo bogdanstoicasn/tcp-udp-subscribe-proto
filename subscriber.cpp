@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 
     server.sin_family = AF_INET;
     server.sin_port = htons(atoi(argv[3]));
-    rc = inet_aton(argv[2], &server.sin_addr);
+    rc = inet_pton(AF_INET, argv[2], &server.sin_addr);
     DIE(rc < 0 , "inet_aton failed");
 
     rc = connect(sockfd, (struct sockaddr *) &server, sizeof(server));
@@ -71,6 +71,7 @@ void workload(int sockfd, char *clientid)
     multiplex.push_back({sockfd, POLLIN, 0});
     multiplex.push_back({STDIN_FILENO, POLLIN, 0});
 
+
     char buff[BUFF_LEN], *argv[BUFF_LEN];
     memset(buff, 0, BUFF_LEN);
 
@@ -78,15 +79,20 @@ void workload(int sockfd, char *clientid)
         memset(buff, 0, BUFF_LEN);
         memset(argv, 0, sizeof(argv));
 
-        rc = poll(multiplex.data(), multiplex.size(), -1);
+
+        rc = poll(multiplex.data(), 2, -1);
+        if (rc < 0) {
+            perror("poll failed");
+            return;
+        }
 
         // server respons
-        if (multiplex[0].revents && POLLIN) {
+        if (multiplex[0].revents & POLLIN) {
             rc = recv_all(sockfd, buff, sizeof(tcp_request));
             DIE(rc < 0, "recv failed to receive server response\n");
 
             // TODO: here we must parse the message received from the server
-
+            
             continue;
         }
 
