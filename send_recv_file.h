@@ -18,4 +18,6 @@ int recv_all(int sockfd, void *buffer, size_t len);
 
 int send_all(int sockfd, void *buffer, size_t len);
 
+int whitespace_parse(char *buff, char **argv);
+
 #endif

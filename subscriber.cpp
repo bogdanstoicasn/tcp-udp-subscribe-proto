@@ -3,7 +3,15 @@
 #include "utils.h"
 //end of user defined headers
 
-void workload(int sockfd);
+void workload(int sockfd,char *clientid);
+
+int exit_function(int sockfd, char *id, char *comp, int argc);
+
+int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
+
+int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
+
+void close_connections(struct pollfd *multiplex, int size);
 
 int main(int argc, char *argv[])
 {
@@ -29,32 +37,146 @@ int main(int argc, char *argv[])
 	DIE(rc < 0, "fail(SO_REUSEADDR)");
 
     // connect to server
-    struct sockaddr_in server_addr;
+    struct sockaddr_in server;
+    memset((char *) &server, 0, sizeof(server));
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(atoi(argv[3]));
-    rc = inet_aton(argv[2], &server_addr.sin_addr);
+    server.sin_family = AF_INET;
+    server.sin_port = htons(atoi(argv[3]));
+    rc = inet_aton(argv[2], &server.sin_addr);
     DIE(rc < 0 , "inet_aton failed");
 
-    rc = connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr));
+    rc = connect(sockfd, (struct sockaddr *) &server, sizeof(server));
     DIE(rc < 0, "connect failed");
 
-    // send id_client to server
-    char buffer[ID_LEN + 1];
-
-    memset((void *) buffer, 0, ID_LEN + 1);
-    strcpy(buffer, argv[1]);
-    rc = send_all(sockfd, buffer, ID_LEN + 1);
-    DIE(rc < 0, "send failed");
-
-    workload(sockfd);
+    // send client id packet to server
+    tcp_request req;
+    memset((void *) &req, 0, sizeof(tcp_request));
+    strcpy(req.id, argv[1]);
+    req.type = CONNECT;
+    rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
+    
+    workload(sockfd, argv[1]);
 
     close(sockfd);
 
     return 0;
 }
 
-void workload(int sockfd)
+void workload(int sockfd, char *clientid)
 {
-    ;
+    // for error checking/ general use
+    int rc, argc;
+    std::vector<struct pollfd> multiplex;
+
+    multiplex.push_back({sockfd, POLLIN, 0});
+    multiplex.push_back({STDIN_FILENO, POLLIN, 0});
+
+    char buff[BUFF_LEN], *argv[BUFF_LEN];
+    memset(buff, 0, BUFF_LEN);
+
+    for(;;) {
+        memset(buff, 0, BUFF_LEN);
+        memset(argv, 0, sizeof(argv));
+
+        rc = poll(multiplex.data(), multiplex.size(), -1);
+
+        // server respons
+        if (multiplex[0].revents && POLLIN) {
+            rc = recv_all(sockfd, buff, sizeof(tcp_request));
+            DIE(rc < 0, "recv failed to receive server response\n");
+
+            // TODO: here we must parse the message received from the server
+
+            continue;
+        }
+
+        if (!(multiplex[1].revents & POLLIN)) {
+            continue;
+        }
+
+        // stdin input by subscriber
+        fgets(buff, BUFF_LEN, stdin);
+        argc = whitespace_parse(buff, argv);
+
+        // exit
+        if (!exit_function(sockfd, clientid, argv[0], argc)) {
+            close_connections(multiplex.data(), multiplex.size());
+            return;
+        }
+
+        // subscribe
+        if (!subscribe_function(sockfd, clientid, argv[0], argv[1], argc)) {
+            continue;
+        }
+
+        // unsubscribe
+        if (!unsubscribe_function(sockfd, clientid, argv[0], argv[1], argc)) {
+            continue;
+        }
+
+    }
+}
+
+int exit_function(int sockfd, char *id, char *comp, int argc)
+{
+    if (strcmp(comp, "exit") == 0 && argc == 1) {
+        tcp_request req;
+        memset((void *) &req, 0, sizeof(tcp_request));
+        strcpy(req.id, id);
+        req.type = EXIT;
+        int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
+        DIE(rc < 0, "send failed to send exit message\n");
+        return 0;
+    }
+
+    printf("\nWrong format\n");
+
+    return 1;
+}
+
+int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
+{
+    if (strcmp(comp, "subscribe") == 0 && argc == 2) {
+        tcp_request req;
+        memset((void *) &req, 0, sizeof(tcp_request));
+        strcpy(req.id, id);
+        req.type = SUBSCRIBE;
+        strcpy(req.s, topic);
+        int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
+        DIE(rc < 0, "send failed to send subscribe message\n");
+
+        printf("Subscribed to topic %s\n", topic);
+        return 0;
+    }
+
+    printf("\nWrong format\n");
+
+    return 1;
+}
+
+int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
+{
+    if (strcmp(comp, "unsubscribe") == 0 && argc == 2) {
+        tcp_request req;
+        memset((void *) &req, 0, sizeof(tcp_request));
+        strcpy(req.id, id);
+        req.type = UNSUBSCRIBE;
+        strcpy(req.s, topic);
+        int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
+        DIE(rc < 0, "send failed to send unsubscribe message\n");
+
+        printf("Unsubscribed from topic %s\n", topic);
+        return 0;
+    }
+
+    printf("\nWrong format\n");
+
+    return 1;
+}
+
+void close_connections(struct pollfd *multiplex, int size)
+{
+    for (int i = 0; i < size; i++) {
+        close(multiplex[i].fd);
+    }
 }

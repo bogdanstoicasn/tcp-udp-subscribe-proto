@@ -27,24 +27,38 @@
 
 #define NO_CONTENT_SIZE (sizeof(tcp_client) - CONTENT_LEN)
 
+enum request_type {
+    EXIT,
+    SUBSCRIBE,
+    UNSUBSCRIBE,
+    CONNECT
+};
+
 typedef struct udp_message {
-	char topic[TOPIC_LEN];
-	uint8_t type;
-	char content[CONTENT_LEN];
+	int control;
+	int len;
+	char topic[TOPIC_LEN + 1];
 } udp_message;
 
+
 typedef struct tcp_client {
-	uint32_t ip;
-	uint16_t port;
-	uint8_t type;
-	char topic[TOPIC_LEN];
-	char content[CONTENT_LEN];
+	int fd;
+	bool connection;
+	std::string id;
+	std::map<std::string, bool> topics;
+	std::vector<udp_message *> messages;
 } tcp_client;
 
-typedef struct tcp_server {
-	// 0 - sub, 1 - unsub
-	int type;
-	int sf;
-	char topic[TOPIC_LEN + 1];
-} tcp_server;
+// typedef struct subscribe {
+// 	char topic[TOPIC_LEN + 1];
+// 	int sf;
+// } subscribe;
+
+typedef struct tcp_request {
+	char id[ID_LEN + 1];
+	char s[CONTENT_LEN + 1];
+	// subscribe s
+	request_type type;
+} tcp_request;
+
 #endif

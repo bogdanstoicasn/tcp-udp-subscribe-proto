@@ -38,3 +38,15 @@ int send_all(int sockfd, void *buffer, size_t len)
 	}
 	return bytes_sent;
 }
+
+// function that parses \n and \t
+int whitespace_parse(char *buff, char **argv)
+{
+	int argc = 0;
+	char *p = strtok(buff, " \n\t");
+	while (p) {
+		argv[argc++] = p;
+		p = strtok(NULL, " \n\t");
+	}
+	return argc;
+}
