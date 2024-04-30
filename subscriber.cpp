@@ -134,9 +134,6 @@ int exit_function(int sockfd, char *id, char *comp, int argc)
         DIE(rc < 0, "send failed to send exit message\n");
         return 0;
     }
-
-    printf("\nWrong format\n");
-
     return 1;
 }
 
@@ -155,8 +152,6 @@ int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
         return 0;
     }
 
-    printf("\nWrong format\n");
-
     return 1;
 }
 
@@ -174,9 +169,6 @@ int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc
         printf("Unsubscribed from topic %s\n", topic);
         return 0;
     }
-
-    printf("\nWrong format\n");
-
     return 1;
 }
 
