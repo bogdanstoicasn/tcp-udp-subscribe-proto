@@ -8,6 +8,7 @@ std::map<int, std::pair<in_addr, uint16_t>> ips_ports;
 std::map<std::string, tcp_client *> ids;
 
 void workload(int fdlisten, int fdudp);
+void handle_tcp_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_request req);
 
 int main(int argc, char *argv[])
 {
@@ -63,6 +64,7 @@ void workload(int fdlisten, int fdudp)
 
 	// error
 	int rc;
+	int enable = 1;
 
 	std::vector<struct pollfd> multiplex;
 
@@ -74,16 +76,22 @@ void workload(int fdlisten, int fdudp)
 		DIE(rc < 0, "poll failed");
 
 		for (size_t i = 0; i < multiplex.size(); ++i) {
-			//TODO
 			if (!multiplex[i].revents)
 				continue;
+
 			if (multiplex[i].fd == fdlisten) {
 				// new connection
 				struct sockaddr_in client;
 				socklen_t len = sizeof(client);
 				int newsock = accept(fdlisten, (struct sockaddr *)&client, &len);
 				DIE(newsock < 0, "accept failed");
-				printf("New client %s:%d\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+
+				// make the socket non-blocking
+				setsockopt(newsock, SOL_SOCKET, SO_REUSEADDR | TCP_NODELAY, &enable, sizeof(int));
+				DIE(rc < 0, "setsockopt failed");
+
+				// save the ip and port
+				ips_ports[newsock] = std::make_pair(client.sin_addr, client.sin_port);
 				multiplex.push_back({newsock, POLLIN, 0});
 				continue;
 			}
@@ -94,7 +102,7 @@ void workload(int fdlisten, int fdudp)
 				rc = read(STDIN_FILENO, buffer, BUFF_LEN);
 				DIE(rc < 0, "read failed");
 				// parse the command
-				char *command = strtok(buffer, " \n");
+				char *command = strtok(buffer, " \n\t");
 				if (strcmp(command, "exit") == 0) {
 					// close all connections
 					for (size_t j = 0; j < multiplex.size(); ++j) {
@@ -104,9 +112,53 @@ void workload(int fdlisten, int fdudp)
 					}
 					return;
 				}
-			
-				}
+			}
+
+			tcp_request req;
+			recv_all(multiplex[i].fd, (void *)&req, sizeof(tcp_request));
+
+			handle_tcp_request(multiplex[i].fd, i, multiplex, req);
+		}
+	}
+}
+
+void handle_tcp_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_request req)
+{
+	//int rc;
+	if (req.type == CONNECT) {
+		if (ids.find(req.id) != ids.end()) {
+			// client already connected, block new conn
+			if (ids[req.id]->connection) {
+				printf("Client %s already connected.\n", req.id);
+				close(multiplex[i].fd);
+				multiplex.erase(multiplex.begin() + i);
+				ips_ports.erase(multiplex[i].fd);
+				return;
+			}
+
+			// client stored but offline
+			// HERE check print
+			printf("New client %s connected from %hu:%s.\n", req.id, ntohs(ips_ports[fd].second), inet_ntoa(ips_ports[fd].first));
+			// send the message from waiting queue
+			// TODO
+			return;
 		}
 
+		printf("New client %s connected from %hu:%s.\n", req.id, ntohs(ips_ports[fd].second), inet_ntoa(ips_ports[fd].first));
+		tcp_client *client = new tcp_client;
+		client->fd = fd;
+		client->connection = true;
+		client->id = req.id;
+		
+		ids.insert({req.id, client});
+		return;
+	}
+
+	if (req.type == EXIT) {
+		printf("Client %s disconnected.\n", req.id);
+		ids[req.id]->connection = false;
+		close(multiplex[i].fd);
+		multiplex.erase(multiplex.begin() + i);
+		return;
 	}
 }
