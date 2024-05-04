@@ -92,15 +92,16 @@ void workload(int sockfd, char *clientid)
 
         // server respons
         if (multiplex[0].revents & POLLIN) {
+            rc = 0;
             rc = recv_all(sockfd, buff, sizeof(tcp_request));
-            if (rc <= 0) {
+            if (!rc) {
                 close_connections(multiplex.data(), multiplex.size());
                 perror("recv failed");
                 return;
             }
 
             // TODO: here we must parse the message received from the server
-            
+            printf("Msg\n");
             continue;
         }
 

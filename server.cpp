@@ -7,7 +7,8 @@ std::map<int, std::pair<in_addr, uint16_t>> ips_ports;
 
 std::map<std::string, tcp_client *> ids;
 
-std::map<std::string, std::vector<tcp_client *>> topics;
+// TODO:add a varible or smth that holds the topics and the clients that are subscribed to them
+
 
 void workload(int fdlisten, int fdudp);
 
@@ -98,7 +99,10 @@ void workload(int fdlisten, int fdudp)
 		for (size_t i = 0; i < multiplex.size(); ++i) {
 			if (!(multiplex[i].revents & POLLIN)) {continue;}
 			if (multiplex[i].fd == fdudp) {
-				//TODO
+				memset(buffer, 0, BUFF_LEN);
+				struct sockaddr_in youtube;
+
+				recvfrom(multiplex[i].fd, buffer, BUFF_LEN, 0, (struct sockaddr *)&youtube, (socklen_t *)sizeof(youtube));
 				continue;
 			}
 			if (multiplex[i].fd == fdlisten) {
@@ -176,12 +180,13 @@ void handle_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_re
 	if (request->type == SUBSCRIBE) {
 		tcp_client *client = ids[request->id];
 		rc = regex_search(request);
+		(void)client;
 		// topic with no regex
 		if (rc == 0) {
-			if (!client->topics.count(request->s))
-				topics[request->s].push_back(client);
+			// if (!client->topics.count(request->s))
+			// 	topics[request->s].push_back(client);
 
-			client->topics[request->s] = true;
+			// client->topics[request->s] = true;
 		}
 
 		// topic with regex
@@ -193,12 +198,13 @@ void handle_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_re
 
 		rc = regex_search(request);
 		
+		(void)client;
 		// topic with no regex
 		if (rc == 0) {
-			auto &topic = topics[request->s];
-			topic.erase(std::find(topic.begin(), topic.end(), client));
+			// auto &topic = topics[request->s];
+			// topic.erase(std::find(topic.begin(), topic.end(), client));
 
-			client->topics.erase(request->s);
+			// client->topics.erase(request->s);
 		}
 
 		// topic with regex
