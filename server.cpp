@@ -33,12 +33,24 @@ int main(int argc, char *argv[])
 	int fdlisten = socket(AF_INET, SOCK_STREAM, 0);
 	DIE(fdlisten < 0, "sock failed");
 
+	// make reusablae port
+	int enable = 1;
+	rc = setsockopt(fdlisten, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+	DIE(rc < 0, "setsockopt failed");
+
 	// create a UDP socket
 	int fdudp = socket(AF_INET, SOCK_DGRAM, 0);
 	DIE(fdudp < 0, "sock failed");
 
+	// make reusablae port
+	rc = setsockopt(fdudp, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+	DIE(rc < 0, "setsockopt failed");
+
+	// disable nagle's algorithm
+	int flag = 1;
+	rc = setsockopt(fdlisten, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
+
 	struct sockaddr_in server;
-	//socklen_t socket_len = sizeof(struct sockaddr_in);
 
 	memset((char *)&server, 0, sizeof(server));
 	server.sin_family = AF_INET;
@@ -84,41 +96,43 @@ void workload(int fdlisten, int fdudp)
 		DIE(rc < 0, "poll failed");
 
 		for (size_t i = 0; i < multiplex.size(); ++i) {
-			if (multiplex[i].revents & POLLIN) {
-				if (multiplex[i].fd == fdudp) {
-					//TODO
-					continue;
-				}
-				if (multiplex[i].fd == fdlisten) {
-					struct sockaddr_in client;
-					socklen_t len = sizeof(client);
-					int fd = accept(fdlisten, (struct sockaddr *)&client, &len);
-					DIE(fd < 0, "accept failed");
-
-					multiplex.push_back({fd, POLLIN, 0});
-					ips_ports[fd] = std::make_pair(client.sin_addr, client.sin_port);
-					continue;
-				}
-				if (multiplex[i].fd == STDIN_FILENO) {
-					memset(buffer, 0, BUFF_LEN);
-					fgets(buffer, BUFF_LEN - 1, stdin);
-					buffer[strlen(buffer) - 1] = '\0';
-					if (strcmp(buffer, "exit") == 0) {
-						for (size_t j = 0; j < multiplex.size(); ++j) {
-							if (multiplex[j].fd != fdlisten && multiplex[j].fd != fdudp) {
-								close(multiplex[j].fd);
-							}
-						}
-						return;
-					}
-					continue;
-				}
-				// receive request
-				tcp_request request;
-				memset(&request, 0, sizeof(tcp_request));
-				recv_all(multiplex[i].fd, &request, sizeof(tcp_request));
-				handle_request(multiplex[i].fd, i, multiplex, &request);
+			if (!(multiplex[i].revents & POLLIN)) {continue;}
+			if (multiplex[i].fd == fdudp) {
+				//TODO
+				continue;
 			}
+			if (multiplex[i].fd == fdlisten) {
+				struct sockaddr_in client;
+				socklen_t len = sizeof(client);
+				int fd = accept(fdlisten, (struct sockaddr *)&client, &len);
+				DIE(fd < 0, "accept failed");
+				// make reusablae port
+				int enable = 1;
+				rc = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+				DIE(rc < 0, "setsockopt failed");
+				multiplex.push_back({fd, POLLIN, 0});
+				ips_ports[fd] = std::make_pair(client.sin_addr, client.sin_port);
+				continue;
+			}
+			if (multiplex[i].fd == STDIN_FILENO) {
+				memset(buffer, 0, BUFF_LEN);
+				fgets(buffer, BUFF_LEN - 1, stdin);
+				buffer[strlen(buffer) - 1] = '\0';
+				if (strcmp(buffer, "exit") == 0) {
+					for (size_t j = 0; j < multiplex.size(); ++j) {
+						if (multiplex[j].fd != fdlisten && multiplex[j].fd != fdudp) {
+							close(multiplex[j].fd);
+						}
+					}
+					return;
+				}
+				continue;
+			}
+			// receive request
+			tcp_request request;
+			memset(&request, 0, sizeof(tcp_request));
+			recv_all(multiplex[i].fd, &request, sizeof(tcp_request));
+			handle_request(multiplex[i].fd, i, multiplex, &request);
 		}
 	}
 }

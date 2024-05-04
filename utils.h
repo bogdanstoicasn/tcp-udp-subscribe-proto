@@ -35,7 +35,7 @@ enum request_type {
 };
 
 typedef struct udp_message {
-	int control;
+	int counter;
 	int len;
 	char topic[TOPIC_LEN + 1];
 } udp_message;

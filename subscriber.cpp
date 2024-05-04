@@ -30,10 +30,15 @@ int main(int argc, char *argv[])
     // create a TCP socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     DIE(sockfd < 0, "sock failed");
+
     // make address reusable
     int enable = 1;
     rc = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
 	DIE(rc < 0, "fail(SO_REUSEADDR)");
+
+    // nagles algorithm
+    int flag = 1;
+    rc = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
 
     // connect to server
     struct sockaddr_in server;
