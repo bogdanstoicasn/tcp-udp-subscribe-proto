@@ -35,9 +35,8 @@ enum request_type {
 };
 
 typedef struct udp_message {
-	int counter;
 	int len;
-	char topic[TOPIC_LEN + 1];
+	char *payload;
 } udp_message;
 
 
@@ -45,19 +44,13 @@ typedef struct tcp_client {
 	int fd;
 	bool connection;
 	std::string id;
-	std::map<std::string, bool> topics;
+	std::vector<std::string> topics;
 	std::vector<udp_message *> messages;
 } tcp_client;
-
-// typedef struct subscribe {
-// 	char topic[TOPIC_LEN + 1];
-// 	int sf;
-// } subscribe;
 
 typedef struct tcp_request {
 	char id[ID_LEN + 1];
 	char s[CONTENT_LEN + 1];
-	// subscribe s
 	request_type type;
 } tcp_request;
 

@@ -4,6 +4,7 @@
 
 #include "send_recv_file.h"
 
+// store bytes received in buffer, return the number of bytes received
 int recv_all(int sockfd, void *buffer, size_t len)
 {
 	int rc;
@@ -21,6 +22,7 @@ int recv_all(int sockfd, void *buffer, size_t len)
 	return bytes_received;
 }
 
+// send all data and return the number of bytes sent
 int send_all(int sockfd, void *buffer, size_t len)
 {
 	int rc;

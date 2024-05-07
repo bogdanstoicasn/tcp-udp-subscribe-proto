@@ -11,6 +11,8 @@ int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
 
 int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
 
+void handle_subscription(char *buff);
+
 void close_connections(struct pollfd *multiplex, int size);
 
 int main(int argc, char *argv[])
@@ -39,6 +41,7 @@ int main(int argc, char *argv[])
     // nagles algorithm
     int flag = 1;
     rc = setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
+    DIE(rc < 0, "fail(TCP_NODELAY)");
 
     // connect to server
     struct sockaddr_in server;
@@ -55,9 +58,13 @@ int main(int argc, char *argv[])
     // send client id packet to server
     tcp_request req;
     memset((void *) &req, 0, sizeof(tcp_request));
+
     strcpy(req.id, argv[1]);
+
     req.type = CONNECT;
+
     rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
+    DIE(rc < 0, "send failed to send connect message\n");
     
     workload(sockfd, argv[1]);
 
@@ -80,10 +87,6 @@ void workload(int sockfd, char *clientid)
     memset(buff, 0, BUFF_LEN);
 
     for(;;) {
-        memset(buff, 0, BUFF_LEN);
-        memset(argv, 0, sizeof(argv));
-
-
         rc = poll(multiplex.data(), 2, -1);
         if (rc < 0) {
             perror("poll failed");
@@ -92,25 +95,39 @@ void workload(int sockfd, char *clientid)
 
         // server respons
         if (multiplex[0].revents & POLLIN) {
+            int size = 0;
             rc = 0;
-            rc = recv_all(sockfd, buff, sizeof(tcp_request));
+            rc = recv_all(sockfd, &size, sizeof(int));
             if (!rc) {
                 close_connections(multiplex.data(), multiplex.size());
                 perror("recv failed");
                 return;
             }
 
-            // TODO: here we must parse the message received from the server
-            printf("Msg\n");
+            char *payload = new char[size];
+
+            rc = recv_all(sockfd, payload, size);
+            if (!rc) {
+                close_connections(multiplex.data(), multiplex.size());
+                perror("recv failed");
+                return;
+            }
+
+            handle_subscription(payload);
+
+            delete[] payload;
+
             continue;
         }
 
-        if (!(multiplex[1].revents & POLLIN)) {
+        if (!(multiplex[1].revents & POLLIN))
             continue;
-        }
+
+        memset(buff, 0, BUFF_LEN);
+        memset(argv, 0, sizeof(argv));
 
         // stdin input by subscriber
-        fgets(buff, BUFF_LEN, stdin);
+        fgets(buff, BUFF_LEN - 1, stdin);
         argc = whitespace_parse(buff, argv);
 
         // exit
@@ -120,14 +137,12 @@ void workload(int sockfd, char *clientid)
         }
 
         // subscribe
-        if (!subscribe_function(sockfd, clientid, argv[0], argv[1], argc)) {
+        if (!subscribe_function(sockfd, clientid, argv[0], argv[1], argc))
             continue;
-        }
 
         // unsubscribe
-        if (!unsubscribe_function(sockfd, clientid, argv[0], argv[1], argc)) {
+        if (!unsubscribe_function(sockfd, clientid, argv[0], argv[1], argc))
             continue;
-        }
 
     }
 }
@@ -138,9 +153,12 @@ int exit_function(int sockfd, char *id, char *comp, int argc)
         tcp_request req;
         memset((void *) &req, 0, sizeof(tcp_request));
         strcpy(req.id, id);
+
         req.type = EXIT;
+
         int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
         DIE(rc < 0, "send failed to send exit message\n");
+
         return 0;
     }
     return 1;
@@ -152,8 +170,10 @@ int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
         tcp_request req;
         memset((void *) &req, 0, sizeof(tcp_request));
         strcpy(req.id, id);
+
         req.type = SUBSCRIBE;
         strcpy(req.s, topic);
+
         int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
         DIE(rc < 0, "send failed to send subscribe message\n");
 
@@ -170,8 +190,10 @@ int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc
         tcp_request req;
         memset((void *) &req, 0, sizeof(tcp_request));
         strcpy(req.id, id);
+
         req.type = UNSUBSCRIBE;
         strcpy(req.s, topic);
+
         int rc = send_all(sockfd, (void *) &req, sizeof(tcp_request));
         DIE(rc < 0, "send failed to send unsubscribe message\n");
 
@@ -183,7 +205,66 @@ int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc
 
 void close_connections(struct pollfd *multiplex, int size)
 {
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++)
         close(multiplex[i].fd);
+}
+
+void handle_subscription(char *buff)
+{
+    char topic[TOPIC_LEN + 1] = {0};
+
+    memcpy(topic, buff, TOPIC_LEN);
+    buff += TOPIC_LEN;
+
+    u_int8_t type = *buff;
+    buff += sizeof(u_int8_t);
+
+    // int
+    if (type == 0) {
+        int8_t sign = *buff;
+        buff += sizeof(int8_t);
+
+        int32_t network;
+        std::memcpy(&network, buff, sizeof(int32_t));
+        int64_t value = ntohl(network);
+
+        if (sign)
+            value = -value;
+
+        printf("%s - INT - %ld\n", topic, value);
+        return;
     }
+
+    // short real
+    if (type == 1) {
+        uint16_t network;
+        std::memcpy(&network, buff, sizeof(uint16_t));
+        float value = ntohs(network) / 100.0;
+
+        printf("%s - SHORT_REAL - %.2f\n", topic, value);
+        return;
+    }
+
+    // float
+    if (type == 2) {
+        int8_t sign = *buff;
+        buff += sizeof(int8_t);
+
+        u_int32_t network;
+        std::memcpy(&network, buff, sizeof(u_int32_t));
+        float value = ntohl(network);
+
+        if (sign)
+            value = -value;
+
+        buff += sizeof(u_int32_t);
+        int8_t power = *buff;
+
+        printf("%s - FLOAT - %f\n", topic, value / (float) pow(10, power));
+        return;
+    }
+
+    // string
+    if (type == 3)
+        printf("%s - STRING - %s\n", topic, buff);
 }
