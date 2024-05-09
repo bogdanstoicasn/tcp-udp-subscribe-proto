@@ -3,16 +3,22 @@
 #include "utils.h"
 //end of user defined headers
 
+// handle the client functionality
 void workload(int sockfd,char *clientid);
 
+// exit function, closes the connection
 int exit_function(int sockfd, char *id, char *comp, int argc);
 
+// subscribe function, sends the subscribe message to the server
 int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
 
+// unsubscribe function, sends the unsubscribe message to the server
 int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc);
 
+// handle the subscription message shown to stdout
 void handle_subscription(char *buff);
 
+// close all connections(sockets)
 void close_connections(struct pollfd *multiplex, int size);
 
 int main(int argc, char *argv[])
@@ -96,7 +102,6 @@ void workload(int sockfd, char *clientid)
         // server respons
         if (multiplex[0].revents & POLLIN) {
             int size = 0;
-            rc = 0;
             rc = recv_all(sockfd, &size, sizeof(int));
             if (!rc) {
                 close_connections(multiplex.data(), multiplex.size());
@@ -147,6 +152,7 @@ void workload(int sockfd, char *clientid)
     }
 }
 
+// sends exit message to server
 int exit_function(int sockfd, char *id, char *comp, int argc)
 {
     if (strcmp(comp, "exit") == 0 && argc == 1) {
@@ -164,6 +170,7 @@ int exit_function(int sockfd, char *id, char *comp, int argc)
     return 1;
 }
 
+// sends subscribe message to server
 int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
 {
     if (strcmp(comp, "subscribe") == 0 && argc == 2) {
@@ -184,6 +191,7 @@ int subscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
     return 1;
 }
 
+// sends unsubscribe message to server
 int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc)
 {
     if (strcmp(comp, "unsubscribe") == 0 && argc == 2) {
@@ -203,12 +211,14 @@ int unsubscribe_function(int sockfd, char *id, char *comp, char *topic, int argc
     return 1;
 }
 
+// close all connections(sockets)
 void close_connections(struct pollfd *multiplex, int size)
 {
     for (int i = 0; i < size; i++)
         close(multiplex[i].fd);
 }
 
+// handle the subscription message shown to stdout
 void handle_subscription(char *buff)
 {
     char topic[TOPIC_LEN + 1] = {0};

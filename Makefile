@@ -15,6 +15,9 @@ send_recv_file.o: send_recv_file.cpp send_recv_file.h
 	$(CC) $(CFLAGS) -c send_recv_file.cpp
 
 clean:
-	rm -f *.o server subscriber
+	rm -f *.o server subscriber 325CA_Stoica_Mihai-Bogdan_Tema2.zip
+
+pack:
+	zip -r 325CA_Stoica_Mihai-Bogdan_Tema2.zip Makefile server.cpp subscriber.cpp send_recv_file.cpp send_recv_file.h utils.h README.md readme.txt
 
 .PHONY: clean

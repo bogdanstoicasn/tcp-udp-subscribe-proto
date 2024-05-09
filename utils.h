@@ -45,7 +45,6 @@ typedef struct tcp_client {
 	bool connection;
 	std::string id;
 	std::vector<std::string> topics;
-	std::vector<udp_message *> messages;
 } tcp_client;
 
 typedef struct tcp_request {

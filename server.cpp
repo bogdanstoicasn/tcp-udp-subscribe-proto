@@ -129,26 +129,20 @@ void workload(int fdlisten, int fdudp)
 				// if it is we send the message to the client
 				for (auto it = ids.begin(); it != ids.end(); ++it) {
 					tcp_client *client = it->second;
-					if (std::find(client->topics.begin(), client->topics.end(), tpp) != client->topics.end()) {
+					if (std::find(client->topics.begin(),
+						client->topics.end(), tpp) != client->topics.end()) {
 						// if connected
 						if (client->connection) {
 							// send the message: first size then the message
 							send_all(client->fd, &msg->len, sizeof(int));
 							send_all(client->fd, msg->payload, msg->len);
-							continue;
 						}
-						// if not connected we add the message to the messages field
-						rc = 0;
-						client->messages.push_back(msg);
 					}
 					
 				}
 				
-				// free the message
-				if (!rc) {
-					delete[] msg->payload;
-					delete msg;
-				}
+				delete[] msg->payload;
+				delete msg;
 				continue;
 			}
 
@@ -228,9 +222,10 @@ void handle_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_re
 			// client in database
 			printf("New client %s connected from %hu:%s.\n", request->id,
 				   ntohs(map_ipport[fd].second), inet_ntoa(map_ipport[fd].first));
+
 			auto client = ids[request->id];
 			client->connection = true;
-			//TODO: send the msgs from the messages field
+
 			return;
 		}
 		printf("New client %s connected from %hu:%s.\n", request->id,
@@ -261,7 +256,8 @@ void handle_request(int fd, int i, std::vector<struct pollfd> &multiplex, tcp_re
 		// topic with no regex
 		if (rc == 0) {
 			// remove topic from client in topics field
-			auto it = std::find(client->topics.begin(), client->topics.end(), request->s);
+			auto it = std::find(client->topics.begin(),
+								client->topics.end(), request->s);
 			if (it != client->topics.end())
 				client->topics.erase(it);
 			return;
@@ -286,13 +282,6 @@ int regex_search(tcp_request *request)
 
 void free_ids()
 {
-	for (auto it = ids.begin(); it != ids.end(); ++it) {
+	for (auto it = ids.begin(); it != ids.end(); ++it)
 		delete it->second;
-		// free the messages field
-		// HERE
-		for (auto it2 = it->second->messages.begin(); it2 != it->second->messages.end(); ++it2) {
-			delete[] (*it2)->payload;
-			delete *it2;
-		}
-	}
 }
